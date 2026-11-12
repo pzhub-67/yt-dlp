@@ -67,8 +67,8 @@ function toEmbed(text) {
 
 // YouTube's player only works on a page that has a real web address (http:// or https://).
 // Opened as a file, or inside an app's preview, it stays black or shows an error.
-const hosted = /^https?:$/.test(location.protocol) && window.top === window.self;
-const NOT_HOSTED = "This page is open as a file or inside a preview, so YouTube's player will stay black. " +
+const hosted = /^https?:$/.test(location.protocol);
+const NOT_HOSTED = "This page is open as a file, so YouTube's player will stay black. " +
   "Open it from a web address instead: GitHub Pages, or http://localhost:8000/watch.html.";
 
 function say(text, bad) { $("msg").textContent = text; $("msg").classList.toggle("bad", !!bad); }
