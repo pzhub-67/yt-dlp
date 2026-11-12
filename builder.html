@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Grab Command Builder</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: one column of choices on the left, the finished command pinned beside it (stacked below on phones). */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #16212b; --muted: #5b6b79; --line: #cfd7de;
+  --accent: #0b6e75; --accent-ink: #ffffff; --accent-soft: #d9eeef;
+  --term-bg: #13232c; --term-ink: #e4eef2; --term-dim: #8fa6b2; --term-hi: #f2b84b;
+  --bad: #b3261e;
+  --display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f191f; --surface: #172630; --ink: #e6eef2; --muted: #93a6b2; --line: #2c404c;
+  --accent: #4fc3c9; --accent-ink: #06282b; --accent-soft: #1d3d42;
+  --term-bg: #0a1216; --term-ink: #e4eef2; --term-dim: #8fa6b2; --term-hi: #f2b84b;
+  --bad: #ff8a80; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f191f; --surface: #172630; --ink: #e6eef2; --muted: #93a6b2; --line: #2c404c;
+  --accent: #4fc3c9; --accent-ink: #06282b; --accent-soft: #1d3d42;
+  --term-bg: #0a1216; --term-ink: #e4eef2; --term-dim: #8fa6b2; --term-hi: #f2b84b;
+  --bad: #ff8a80; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body);
+  padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 24px }
+header { display: grid; gap: 6px }
+h1 { font: 700 28px/1.15 var(--display); margin: 0; text-wrap: balance }
+h1 code { font-family: var(--mono); font-size: .85em; color: var(--accent) }
+.lede { color: var(--muted); margin: 0; max-width: 62ch }
+.grid { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start }
+@media (max-width: 800px) { .grid { grid-template-columns: minmax(0, 1fr) } }
+
+form { display: grid; gap: 20px; min-width: 0 }
+fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; min-width: 0 }
+legend, .label { font: 600 12px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0; margin-bottom: 8px }
+.label { display: block }
+.hint { color: var(--muted); font-size: 13px; margin: 0 }
+.hint.bad { color: var(--bad) }
+input[type=text], input[type=number], select {
+  width: 100%; font: 15px var(--body); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0 }
+input.mono { font-family: var(--mono); font-size: 14px }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.chips { display: flex; flex-wrap: wrap; gap: 6px }
+.chips label { position: relative }
+.chips input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer }
+.chips span { display: block; padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); font-weight: 500; font-size: 14px; user-select: none }
+.chips input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--accent-ink) }
+.chips input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px }
+.row { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)) }
+.check { display: flex; gap: 8px; align-items: center; font-size: 14px }
+.check input { width: 16px; height: 16px; accent-color: var(--accent) }
+
+.out { position: sticky; top: calc(16px + env(safe-area-inset-top, 0px)); display: grid; gap: 14px; min-width: 0 }
+@media (max-width: 800px) { .out { position: static } }
+.term { background: var(--term-bg); color: var(--term-ink); border-radius: 12px; overflow: hidden }
+.tabs { display: flex; gap: 2px; padding: 8px 8px 0; flex-wrap: wrap }
+.tabs button { font: 600 13px var(--body); color: var(--term-dim); background: none; border: 0;
+  padding: 8px 12px; border-radius: 8px 8px 0 0; cursor: pointer }
+.tabs button[aria-selected=true] { color: var(--term-ink); box-shadow: inset 0 -2px 0 var(--term-hi) }
+.tabs button:focus-visible { outline-color: var(--term-hi) }
+pre { margin: 0; padding: 18px 16px; font: 14px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; min-height: 96px }
+pre .p { color: var(--term-hi) }
+.bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px 14px; flex-wrap: wrap }
+.bar small { color: var(--term-dim); font-size: 12.5px }
+.copy { font: 600 14px var(--body); background: var(--term-hi); color: #2a1c00; border: 0; border-radius: 8px; padding: 9px 16px; cursor: pointer }
+.copy:focus-visible { outline-color: var(--term-ink) }
+.plain { margin: 0; color: var(--ink) }
+.plain b { font-weight: 600 }
+details { border-top: 1px solid var(--line); padding-top: 12px }
+summary { cursor: pointer; font-weight: 600 }
+details code, .lede code, .hint code, .check code { font-family: var(--mono); font-size: 13px; background: var(--accent-soft); padding: 2px 6px; border-radius: 4px; overflow-wrap: anywhere }
+details ol, details ul { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 6px; color: var(--muted) }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Build a <code>grab</code> command</h1>
+    <p class="lede">Pick what you want and copy the command into your terminal. This page writes the command; the download itself runs on your device, where <code>grab</code> is installed.</p>
+  </header>
+
+  <div class="grid">
+    <form id="f" autocomplete="off">
+      <div>
+        <label class="label" for="url">Link, or words to search for</label>
+        <input class="mono" type="text" id="url" value="https://youtu.be/VIDEO_ID" spellcheck="false" autocapitalize="off">
+        <p class="hint" id="urlhint"></p>
+      </div>
+
+      <fieldset>
+        <legend>Get</legend>
+        <div class="chips" id="mode">
+          <label><input type="radio" name="mode" id="m-video" value="video" checked><span>Video</span></label>
+          <label><input type="radio" name="mode" id="m-audio" value="audio"><span>Audio only</span></label>
+          <label><input type="radio" name="mode" id="m-subs" value="subs"><span>Subtitles only</span></label>
+          <label><input type="radio" name="mode" id="m-info" value="info"><span>Just info</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset id="fs-quality">
+        <legend>Quality</legend>
+        <div class="chips">
+          <label><input type="radio" name="q" id="q-best" value="" checked><span>Best</span></label>
+          <label><input type="radio" name="q" id="q-4320" value="8k"><span>8K</span></label>
+          <label><input type="radio" name="q" id="q-2160" value="4k"><span>4K</span></label>
+          <label><input type="radio" name="q" id="q-1440" value="1440p"><span>1440p</span></label>
+          <label><input type="radio" name="q" id="q-1080" value="1080p"><span>1080p</span></label>
+          <label><input type="radio" name="q" id="q-720" value="720p"><span>720p</span></label>
+          <label><input type="radio" name="q" id="q-480" value="480p"><span>480p</span></label>
+          <label><input type="radio" name="q" id="q-360" value="360p"><span>360p</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset id="fs-vfmt">
+        <legend>File type</legend>
+        <div class="chips">
+          <label><input type="radio" name="vf" id="vf-mp4" value="mp4" checked><span>mp4</span></label>
+          <label><input type="radio" name="vf" id="vf-mkv" value="mkv"><span>mkv</span></label>
+          <label><input type="radio" name="vf" id="vf-webm" value="webm"><span>webm</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset id="fs-afmt" hidden>
+        <legend>File type</legend>
+        <div class="chips">
+          <label><input type="radio" name="af" id="af-mp3" value="mp3" checked><span>mp3</span></label>
+          <label><input type="radio" name="af" id="af-m4a" value="m4a"><span>m4a</span></label>
+          <label><input type="radio" name="af" id="af-flac" value="flac"><span>flac</span></label>
+          <label><input type="radio" name="af" id="af-wav" value="wav"><span>wav</span></label>
+          <label><input type="radio" name="af" id="af-opus" value="opus"><span>opus</span></label>
+        </div>
+      </fieldset>
+
+      <div id="fs-clip">
+        <span class="label">Only part of it (optional)</span>
+        <div class="row">
+          <input class="mono" type="text" id="c-start" placeholder="start  1:30" aria-label="Clip start" inputmode="text">
+          <input class="mono" type="text" id="c-end" placeholder="end  2:45" aria-label="Clip end" inputmode="text">
+        </div>
+        <p class="hint" id="cliphint">Leave the end empty to go to the end of the video.</p>
+      </div>
+
+      <div id="fs-subs">
+        <label class="check"><input type="checkbox" id="embed"> <span id="embedlabel">Add subtitles to the video</span></label>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="lang" value="en" aria-label="Subtitle language code" maxlength="8">
+          <p class="hint" style="align-self:center">Language code: en, es, fr, ja…</p>
+        </div>
+      </div>
+
+      <div id="fs-pl">
+        <label class="check"><input type="checkbox" id="pl"> Download the whole playlist</label>
+        <div class="row" style="margin-top:8px" id="firstrow" hidden>
+          <input type="number" id="first" min="1" placeholder="all items" aria-label="Only the first N items">
+          <p class="hint" style="align-self:center">Only the first N items</p>
+        </div>
+      </div>
+
+      <div class="row" id="fs-misc">
+        <div>
+          <label class="label" for="to">Save to folder</label>
+          <input class="mono" type="text" id="to" placeholder="current folder" spellcheck="false" autocapitalize="off">
+        </div>
+        <div>
+          <label class="label" for="browser">Use login from</label>
+          <select id="browser">
+            <option value="">No login needed</option>
+            <option>chrome</option><option>firefox</option><option>safari</option><option>edge</option><option>brave</option><option>opera</option><option>vivaldi</option><option>chromium</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="label" for="extra">Extra yt-dlp options (optional)</label>
+        <input class="mono" type="text" id="extra" placeholder="--limit-rate 1M" spellcheck="false" autocapitalize="off">
+        <p class="hint">Anything here is handed straight to yt-dlp after <code>--</code>.</p>
+      </div>
+
+      <div>
+        <label class="check"><input type="checkbox" id="noff"> <span>This device has no working ffmpeg</span></label>
+        <p class="hint" id="ffhint">Not sure? Run <code>grab check</code>. Tick this if it shows ✗ next to ffmpeg.</p>
+      </div>
+    </form>
+
+    <section class="out" aria-label="Your command">
+      <p class="plain" id="plain"></p>
+      <div class="term">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" id="t-grab" aria-selected="true">grab</button>
+          <button type="button" role="tab" id="t-ash" aria-selected="false">a-Shell</button>
+          <button type="button" role="tab" id="t-py" aria-selected="false">Python prompt</button>
+          <button type="button" role="tab" id="t-raw" aria-selected="false">Plain yt-dlp</button>
+        </div>
+        <pre id="cmd" tabindex="0"></pre>
+        <div class="bar">
+          <small id="note"></small>
+          <button type="button" class="copy" id="copy">Copy</button>
+        </div>
+      </div>
+
+      <details>
+        <summary>Other commands</summary>
+        <ul>
+          <li><code><span class="pfx">grab</span> check</code> tests this device: is ffmpeg working, and what is limited without it.</li>
+          <li><code><span class="pfx">grab</span></code> on its own asks you step by step.</li>
+          <li><code><span class="pfx">grab</span> update</code> updates the download engine. Try it first when a site stops working.</li>
+          <li><code><span class="pfx">grab</span> help</code> lists every word and option.</li>
+          <li><code><span class="pfx">grab</span> version</code> shows the installed versions.</li>
+          <li>Add <code>--show</code> to any command to print the yt-dlp command without running it.</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>First time? Install grab</summary>
+        <ol>
+          <li>Android (Termux): <code>pkg install python ffmpeg git</code></li>
+          <li>Any device with pip: <code>pip install git+https://github.com/pzhub-67/yt-dlp</code></li>
+          <li>Termux only, to reach your Downloads folder: <code>termux-setup-storage</code>, then save to <code>~/storage/downloads</code></li>
+          <li>iPhone (a-Shell), which has no git: <code>pip install https://github.com/pzhub-67/yt-dlp/archive/refs/heads/main.zip</code></li>
+          <li>Test ffmpeg with <code>python -m grab check</code>. With ffmpeg you get full quality, mp3 and clips. Without it you get the best ready-made file (often 360-720p, audio as m4a) and no clips.</li>
+          <li>If the <code>grab</code> command isn't found, use the Python prompt tab, or run <code>python -m grab</code> in its place.</li>
+        </ol>
+      </details>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const val = name => document.querySelector(`input[name=${name}]:checked`).value;
+const looksLikeUrl = w => w.includes("://") || /^[\w-]+(\.[\w-]+)+(\/|$)/.test(w);
+const sh = s => /^[\w@%+=:,.\/~-]+$/.test(s) ? s : "'" + s.replace(/'/g, "'\\''") + "'";
+const TIME = /^[\d:.]+$/;
+let tab = "grab";
+
+function read() {
+  const raw = $("url").value.trim();
+  const isUrl = raw !== "" && !/\s/.test(raw) && looksLikeUrl(raw);
+  const mode = val("mode");
+  const start = $("c-start").value.trim(), end = $("c-end").value.trim();
+  const noff = $("noff").checked;
+  let clip = "", clipErr = "";
+  if (start || end) {
+    if (!start) clipErr = "Add a start time, e.g. 0:00.";
+    else if (!TIME.test(start) || (end && !TIME.test(end))) clipErr = "Times look like 1:30 or 90.";
+    else clip = start + "-" + end;
+    if (noff && mode !== "subs" && mode !== "info") { clip = ""; clipErr = "Clips need ffmpeg, so this is left out."; }
+  }
+  return { raw, isUrl, mode, clip, clipErr,
+    noff, extra: $("extra").value.trim().split(/\s+/).filter(Boolean),
+    q: val("q"), vf: noff ? "mp4" : val("vf"), af: val("af"),
+    embed: $("embed").checked, lang: ($("lang").value.trim() || "en"),
+    pl: $("pl").checked, first: $("first").value.trim(),
+    to: $("to").value.trim(), browser: $("browser").value };
+}
+
+// Words for the grab command (mirrors grab's own parser).
+function grabWords(s) {
+  const w = s.isUrl ? [s.raw] : s.raw.split(/\s+/).filter(Boolean);
+  if (s.mode === "info") w.push("info");
+  if (s.mode === "audio") w.push(s.noff ? "audio" : s.af);
+  if (s.mode === "subs") { w.push("subs"); if (s.lang !== "en") w.push(s.lang); }
+  if (s.mode === "video") {
+    if (s.q) w.push(s.q);
+    if (s.vf !== "mp4") w.push(s.vf);
+    if (s.embed) { w.push("--subs"); if (s.lang !== "en") w.push(s.lang); }
+  }
+  if (s.mode !== "info") {
+    if (s.clip && s.mode !== "subs") w.push("--clip", s.clip);
+    if (s.pl) { if (s.first) w.push("--first", s.first); else w.push("--playlist"); }
+    if (s.to) w.push("--to", s.to);
+  }
+  if (s.browser) w.push("--browser", s.browser);
+  if (s.extra.length) w.push("--", ...s.extra);
+  return w;
+}
+
+// The yt-dlp arguments grab would generate (mirrors to_ytdlp_args in grab/cli.py).
+function rawArgs(s) {
+  const a = [];
+  if (s.mode === "info") return ["-F", "--no-playlist", ...(s.browser ? ["--cookies-from-browser", s.browser] : []), ...s.extra, s.raw];
+  if (s.mode === "audio" && s.noff) a.push("-f", "ba[ext=m4a]/ba/b");
+  else if (s.mode === "audio") a.push("-f", "ba/b", "-x", "--audio-format", s.af, "--audio-quality", "0", "--embed-metadata");
+  if (s.mode === "subs") a.push("--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", s.lang, "--convert-subs", "srt");
+  if (s.mode === "video") {
+    const h = { "4k": 2160, "8k": 4320 }[s.q] || parseInt(s.q) || 0;
+    if (s.noff) {
+      a.push("-f", "b", "-S", (h ? "res:" + h : "res") + ",ext:mp4:m4a");
+      if (s.embed) a.push("--write-subs", "--write-auto-subs", "--sub-langs", s.lang);
+    } else {
+    const prefer = { mp4: ",ext:mp4:m4a", webm: ",ext:webm:webm", mkv: "" }[s.vf];
+    a.push("-f", "bv*+ba/b", "-S", (h ? "res:" + h : "res") + prefer, "--remux-video", s.vf);
+    if (s.embed) a.push("--write-subs", "--write-auto-subs", "--sub-langs", s.lang, "--embed-subs");
+    }
+  }
+  const clip = s.mode !== "subs" ? s.clip : "";
+  if (clip) a.push("--download-sections", "*" + (clip.endsWith("-") ? clip + "inf" : clip));
+  if (s.pl) { a.push("--yes-playlist"); if (s.first) a.push("--playlist-items", "1:" + s.first); }
+  else a.push("--no-playlist");
+  if (s.browser) a.push("--cookies-from-browser", s.browser);
+  if (s.to) a.push("-P", s.to);
+  const tag = clip ? ` [clip ${clip.replace(/:/g, ".").replace(/-$/, "")}]` : "";
+  a.push("-o", `%(playlist_index&{} - |)s%(title).150B${tag}.%(ext)s`);
+  a.push(...s.extra, s.isUrl ? s.raw : "ytsearch1:" + s.raw);
+  return a;
+}
+
+function sentence(s) {
+  if (!s.raw) return "Paste a link to start.";
+  const what = s.isUrl ? "" : `Searches YouTube for <b>${esc(s.raw)}</b>, lets you pick a result, then `;
+  let t;
+  if (s.mode === "info") t = "shows the title, length and available qualities. Nothing is downloaded";
+  else if (s.mode === "subs") t = `saves the <b>${esc(s.lang)}</b> subtitles as an .srt file`;
+  else if (s.mode === "audio" && s.noff) t = "saves the audio in its <b>original format</b> (usually m4a), because converting needs ffmpeg";
+  else if (s.mode === "audio") t = `saves the audio as <b>${s.af}</b>`;
+  else if (s.noff) t = `saves the best <b>ready-made</b> video file${s.q ? " up to <b>" + s.q + "</b>" : ""} (often 360-720p without ffmpeg)` + (s.embed ? `, with <b>${esc(s.lang)}</b> subtitles as a separate file` : "");
+  else t = `saves the video as <b>${s.vf}</b> at ${s.q ? "up to <b>" + s.q + "</b>" : "the <b>best</b> quality available"}` + (s.embed ? `, with <b>${esc(s.lang)}</b> subtitles built in` : "");
+  if (s.mode !== "info") {
+    if (s.clip && s.mode !== "subs") t += `, only from <b>${esc(s.clip.replace(/-$/, " to the end").replace("-", " to "))}</b>`;
+    if (s.pl) t += s.first ? `, for the first <b>${esc(s.first)}</b> items of the playlist` : ", for every item in the playlist";
+    t += s.to ? `, into <b>${esc(s.to)}</b>` : ", into the current folder";
+  }
+  if (s.browser) t += `, signed in with your <b>${s.browser}</b> login`;
+  if (s.extra.length) t += `, plus your extra options`;
+  t = what + t + ".";
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+const esc = t => t.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function render() {
+  const s = read(), m = s.mode;
+  $("fs-quality").hidden = m !== "video";
+  $("fs-vfmt").hidden = m !== "video" || s.noff;
+  $("fs-afmt").hidden = m !== "audio" || s.noff;
+  $("embedlabel").textContent = s.noff ? "Also save subtitles (separate file)" : "Add subtitles to the video";
+  const pfx = tab === "ash" ? "python -m grab" : "grab";
+  document.querySelectorAll(".pfx").forEach(e => e.textContent = pfx);
+  $("fs-clip").hidden = m === "subs" || m === "info";
+  $("fs-subs").hidden = m === "audio" || m === "info";
+  $("embed").closest("label").hidden = m !== "video";
+  $("lang").closest(".row").hidden = m === "video" && !s.embed;
+  $("fs-pl").hidden = m === "info";
+  $("firstrow").hidden = !s.pl;
+  $("to").closest("div").hidden = m === "info";
+  $("urlhint").textContent = !s.raw ? "" : s.isUrl ? "" : "No link found, so this will search YouTube for these words.";
+  $("cliphint").textContent = s.clipErr || "Leave the end empty to go to the end of the video.";
+  $("cliphint").classList.toggle("bad", !!s.clipErr);
+
+  let text = "", prompt = "$ ", note = "";
+  if (!s.raw) { text = ""; note = "Waiting for a link."; }
+  else if (tab === "grab") { text = "grab " + grabWords(s).map(sh).join(" "); note = "Paste into Termux, a-Shell or any terminal."; }
+  else if (tab === "ash") { text = "python -m grab " + grabWords(s).map(sh).join(" "); note = "For a-Shell on iPhone. Files land in Files → On My iPhone → a-Shell."; }
+  else if (tab === "py") {
+    prompt = ">>> ";
+    text = "from grab.cli import main; main(" + JSON.stringify(grabWords(s)).replace(/","/g, '", "') + ")";
+    note = "For Python-only apps such as Pydroid 3.";
+  } else { text = "yt-dlp " + rawArgs(s).map(sh).join(" "); note = "What grab runs for you. Works without grab installed."; }
+  $("cmd").innerHTML = text ? `<span class="p">${esc(prompt)}</span>${esc(text)}` : `<span class="p">$ </span>`;
+  $("cmd").dataset.text = text;
+  $("note").textContent = note;
+  $("plain").innerHTML = sentence(s);
+  $("copy").disabled = !text;
+}
+
+document.querySelectorAll("[role=tab]").forEach(b => b.addEventListener("click", () => {
+  tab = b.id.slice(2);
+  document.querySelectorAll("[role=tab]").forEach(x => x.setAttribute("aria-selected", x === b));
+  try { localStorage.setItem("grab-tab", tab) } catch (e) {}
+  render();
+}));
+$("f").addEventListener("input", render);
+$("f").addEventListener("submit", e => e.preventDefault());
+$("copy").addEventListener("click", () => {
+  const text = $("cmd").dataset.text, btn = $("copy");
+  const done = ok => { btn.textContent = ok ? "Copied" : "Selected. Press copy"; setTimeout(() => btn.textContent = "Copy", 1600); };
+  const select = () => { const r = document.createRange(); r.selectNodeContents($("cmd")); const g = getSelection(); g.removeAllRanges(); g.addRange(r); done(false); };
+  try { navigator.clipboard.writeText(text).then(() => done(true), select); } catch (e) { select(); }
+});
+try { const t = localStorage.getItem("grab-tab"); if (t && $("t-" + t)) { tab = t; document.querySelectorAll("[role=tab]").forEach(x => x.setAttribute("aria-selected", x.id === "t-" + t)); } } catch (e) {}
+render();
+</script>
+</body>
+</html>

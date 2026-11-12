@@ -45,6 +45,11 @@ ffmpeg does the merging and converting. Run `grab check` to see whether it works
 Install: `pkg install ffmpeg` (Termux), `brew install ffmpeg` (Mac), `sudo apt install ffmpeg` (Linux),
 `winget install ffmpeg` (Windows). a-Shell on iPhone has it built in.
 
+## Web pages
+
+- `builder.html` - pick options and copy the matching `grab` command.
+- `watch.html` - paste a YouTube link and watch it embedded. Needs a web address (GitHub Pages or `python -m http.server`), not a local file.
+
 ## Test
 
 ```bash
