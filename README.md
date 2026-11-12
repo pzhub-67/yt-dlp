@@ -32,6 +32,19 @@ Nothing is lost: anything after `--` goes straight to yt-dlp
 (`grab URL -- --limit-rate 1M`), and `--show` prints the exact yt-dlp command
 instead of running it.
 
+## ffmpeg
+
+ffmpeg does the merging and converting. Run `grab check` to see whether it works on your device.
+
+| With ffmpeg | Without |
+|---|---|
+| Best quality (up to 4K/8K) | Best single ready-made file, often 360-720p |
+| mp3 / flac / wav / opus | Audio in its original format (usually m4a) |
+| mkv / webm, `--clip`, `--subs` built in | Not available |
+
+Install: `pkg install ffmpeg` (Termux), `brew install ffmpeg` (Mac), `sudo apt install ffmpeg` (Linux),
+`winget install ffmpeg` (Windows). a-Shell on iPhone has it built in.
+
 ## Test
 
 ```bash

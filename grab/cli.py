@@ -43,6 +43,7 @@ OPTIONS
   -- ...                       anything after -- is passed straight to yt-dlp
 
 OTHER
+  grab check                   test this device: is ffmpeg working, what will be limited
   grab update                  update the download engine (fixes most site errors)
   grab help | grab version
 
@@ -337,11 +338,53 @@ def explain(err):
 
 # ---------------------------------------------------------------- actions
 
+def ffmpeg_version():
+    """Return ffmpeg's version string, or None if it can't be run.
+
+    Runs it rather than looking on PATH: on a-Shell (iPhone) ffmpeg is built into
+    the shell, so there is no file to find but running it still works.
+    """
+    import subprocess
+    try:
+        r = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=15)
+    except Exception:
+        return None
+    if r.returncode != 0:
+        return None
+    m = re.search(r"ffmpeg version (\S+)", (r.stdout or "") + (r.stderr or ""))
+    return m.group(1) if m else "found"
+
+
+def do_check():
+    """grab check: is everything this device needs in place?"""
+    import platform
+    import yt_dlp.version
+    ok, no = green("✓"), red("✗")
+    print(f"  {ok} Python {platform.python_version()}")
+    print(f"  {ok} download engine (yt-dlp {yt_dlp.version.__version__})")
+    v = ffmpeg_version()
+    if v:
+        print(f"  {ok} ffmpeg {v}  - full quality, mp3 conversion and --clip all work")
+    else:
+        print(f"  {no} ffmpeg not found - downloads still work, but only ready-made files:\n"
+              "      video often capped at 360-720p, audio stays m4a, no --clip, no mp3/mkv conversion.\n"
+              "      Install it:\n"
+              "        Android (Termux)   pkg install ffmpeg\n"
+              "        Mac                brew install ffmpeg\n"
+              "        Linux              sudo apt install ffmpeg\n"
+              "        Windows            winget install ffmpeg\n"
+              "        iPhone (a-Shell)   built in: type  ffmpeg -version  to confirm, and update a-Shell\n"
+              "                           from the App Store if that fails")
+    here = os.getcwd()
+    print(f"  {ok if os.access(here, os.W_OK) else no} saving to {here}")
+    return 0
+
+
 def need_ffmpeg(req):
     if req["ffmpeg"] or req["mode"] not in ("audio", "video"):
         return
     print(dim("note: no ffmpeg on this device, so I'm taking the best ready-made file "
-              "(video is often capped at 360-720p; audio stays in its original format)."), file=sys.stderr)
+              "(video is often capped at 360-720p; audio stays in its original format). Run 'grab check' for how to fix."), file=sys.stderr)
 
 
 def make_ydl(args, progress=None, **extra):
@@ -477,7 +520,7 @@ def dispatch(req):
         return do_search(req)
     if not req["urls"]:
         raise UsageError("Give me a link or something to search for. Example:  grab https://youtu.be/dQw4w9WgXcQ")
-    req.setdefault("ffmpeg", bool(shutil.which("ffmpeg")))
+    req.setdefault("ffmpeg", bool(ffmpeg_version()))
     if req["show"]:
         print("yt-dlp " + " ".join(shlex.quote(x) for x in to_ytdlp_args(req)))
         return 0
@@ -495,6 +538,8 @@ def main(argv=None):
             import yt_dlp.version
             print(f"grab {__version__} (engine: yt-dlp {yt_dlp.version.__version__})")
             return 0
+        if first in ("check", "doctor") and len(argv) == 1:
+            return do_check()
         if first == "update" and len(argv) == 1:
             return do_update()
         if not argv:
