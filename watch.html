@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YouTube Watcher</title>
+<style>
+  :root { color-scheme: dark; --bg: #10151a; --panel: #1a232b; --line: #2e3c47; --ink: #e8eef2; --muted: #93a4b0; --accent: #4fc3c9; --bad: #ff8a80 }
+  * { box-sizing: border-box }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 24px 16px 40px }
+  main { max-width: 900px; margin: 0 auto; display: grid; gap: 16px }
+  h1 { font-size: 22px; margin: 0 }
+  form { display: flex; gap: 8px; flex-wrap: wrap }
+  input { flex: 1 1 240px; min-width: 0; font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 11px 18px; background: var(--accent); color: #06282b; cursor: pointer }
+  button.quiet { background: var(--panel); color: var(--ink); border: 1px solid var(--line) }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+  #msg { margin: 0; color: var(--muted); font-size: 14px; min-height: 1.5em }
+  #msg.bad { color: var(--bad) }
+  .frame { aspect-ratio: 16 / 9; width: 100%; background: #000; border-radius: 12px; overflow: hidden; display: grid; place-items: center; color: var(--muted) }
+  .frame iframe { width: 100%; height: 100%; border: 0 }
+</style>
+</head>
+<body>
+<main>
+  <h1>YouTube Watcher</h1>
+  <form id="f">
+    <input id="url" type="text" placeholder="Paste a YouTube link" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="YouTube link">
+    <button type="submit">Watch</button>
+    <button type="button" class="quiet" id="paste">Paste</button>
+  </form>
+  <p id="msg">Works with watch, youtu.be, Shorts, live and playlist links.</p>
+  <div class="frame" id="frame">Your video shows up here.</div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Turn any YouTube link (or a bare video ID) into an embed address.
+function toEmbed(text) {
+  text = text.trim();
+  if (/^[\w-]{11}$/.test(text)) return "https://www.youtube.com/embed/" + text + "?autoplay=1";
+  let u;
+  try { u = new URL(/^https?:\/\//i.test(text) ? text : "https://" + text); } catch (e) { return null; }
+  const host = u.hostname.replace(/^(www|m|music)\./, "");
+  let id = null;
+  if (host === "youtu.be") id = u.pathname.slice(1).split("/")[0];
+  else if (host === "youtube.com" || host === "youtube-nocookie.com") {
+    const m = u.pathname.match(/^\/(?:embed|shorts|live|v)\/([\w-]{11})/);
+    id = m ? m[1] : u.searchParams.get("v");
+  } else return null;
+
+  const q = new URLSearchParams({ autoplay: "1" });
+  const list = u.searchParams.get("list");
+  if (list) q.set("list", list);
+  const t = u.searchParams.get("t") || u.searchParams.get("start");
+  if (t) {                                   // 90, 90s, 1m30s, 1h2m3s
+    const p = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/.exec(t);
+    if (p) q.set("start", (+p[1] || 0) * 3600 + (+p[2] || 0) * 60 + (+p[3] || 0));
+  }
+  if (id && /^[\w-]{11}$/.test(id)) return "https://www.youtube.com/embed/" + id + "?" + q;
+  if (list) return "https://www.youtube.com/embed/videoseries?" + q;
+  return null;
+}
+
+function say(text, bad) { $("msg").textContent = text; $("msg").classList.toggle("bad", !!bad); }
+
+function watch(text) {
+  const src = toEmbed(text);
+  if (!src) return say("That doesn't look like a YouTube link. Copy it from the Share button and try again.", true);
+  const f = document.createElement("iframe");
+  f.src = src;
+  f.title = "YouTube video";
+  f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+  f.allowFullscreen = true;
+  f.referrerPolicy = "strict-origin-when-cross-origin";
+  $("frame").replaceChildren(f);
+  say(location.protocol === "file:"
+    ? "If the player shows an error, open this page through a web address (http://…) instead of as a file."
+    : "Playing.");
+  try { localStorage.setItem("last", text); } catch (e) {}
+}
+
+$("f").addEventListener("submit", e => { e.preventDefault(); watch($("url").value); });
+$("url").addEventListener("paste", () => setTimeout(() => watch($("url").value), 0));
+$("paste").addEventListener("click", async () => {
+  try { $("url").value = await navigator.clipboard.readText(); watch($("url").value); }
+  catch (e) { say("Couldn't read the clipboard. Long-press the box and choose Paste.", true); }
+});
+try { const last = localStorage.getItem("last"); if (last) $("url").value = last; } catch (e) {}
+</script>
+</body>
+</html>
