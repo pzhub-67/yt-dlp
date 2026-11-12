@@ -16,6 +16,7 @@
   button.quiet { background: var(--panel); color: var(--ink); border: 1px solid var(--line) }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
   #msg { margin: 0; color: var(--muted); font-size: 14px; min-height: 1.5em }
+  a { color: var(--accent) }
   #msg.bad { color: var(--bad) }
   .frame { aspect-ratio: 16 / 9; width: 100%; background: #000; border-radius: 12px; overflow: hidden; display: grid; place-items: center; color: var(--muted) }
   .frame iframe { width: 100%; height: 100%; border: 0 }
@@ -31,6 +32,7 @@
   </form>
   <p id="msg">Works with watch, youtu.be, Shorts, live and playlist links.</p>
   <div class="frame" id="frame">Your video shows up here.</div>
+  <a id="open" hidden target="_blank" rel="noopener">Not playing? Open it on YouTube</a>
 </main>
 
 <script>
@@ -39,7 +41,7 @@ const $ = id => document.getElementById(id);
 // Turn any YouTube link (or a bare video ID) into an embed address.
 function toEmbed(text) {
   text = text.trim();
-  if (/^[\w-]{11}$/.test(text)) return "https://www.youtube.com/embed/" + text + "?autoplay=1";
+  if (/^[\w-]{11}$/.test(text)) return "https://www.youtube.com/embed/" + text + "?playsinline=1";
   let u;
   try { u = new URL(/^https?:\/\//i.test(text) ? text : "https://" + text); } catch (e) { return null; }
   const host = u.hostname.replace(/^(www|m|music)\./, "");
@@ -50,7 +52,7 @@ function toEmbed(text) {
     id = m ? m[1] : u.searchParams.get("v");
   } else return null;
 
-  const q = new URLSearchParams({ autoplay: "1" });
+  const q = new URLSearchParams({ playsinline: "1" });
   const list = u.searchParams.get("list");
   if (list) q.set("list", list);
   const t = u.searchParams.get("t") || u.searchParams.get("start");
@@ -62,6 +64,12 @@ function toEmbed(text) {
   if (list) return "https://www.youtube.com/embed/videoseries?" + q;
   return null;
 }
+
+// YouTube's player only works on a page that has a real web address (http:// or https://).
+// Opened as a file, or inside an app's preview, it stays black or shows an error.
+const hosted = /^https?:$/.test(location.protocol) && window.top === window.self;
+const NOT_HOSTED = "This page is open as a file or inside a preview, so YouTube's player will stay black. " +
+  "Open it from a web address instead: GitHub Pages, or http://localhost:8000/watch.html.";
 
 function say(text, bad) { $("msg").textContent = text; $("msg").classList.toggle("bad", !!bad); }
 
@@ -75,9 +83,10 @@ function watch(text) {
   f.allowFullscreen = true;
   f.referrerPolicy = "strict-origin-when-cross-origin";
   $("frame").replaceChildren(f);
-  say(location.protocol === "file:"
-    ? "If the player shows an error, open this page through a web address (http://…) instead of as a file."
-    : "Playing.");
+  const id = (src.match(/embed\/([\w-]{11})/) || [])[1];
+  $("open").href = id ? "https://www.youtube.com/watch?v=" + id : text;
+  $("open").hidden = false;
+  say(hosted ? "Tap the video to play." : NOT_HOSTED, !hosted);
   try { localStorage.setItem("last", text); } catch (e) {}
 }
 
@@ -87,6 +96,7 @@ $("paste").addEventListener("click", async () => {
   try { $("url").value = await navigator.clipboard.readText(); watch($("url").value); }
   catch (e) { say("Couldn't read the clipboard. Long-press the box and choose Paste.", true); }
 });
+if (!hosted) say(NOT_HOSTED, true);
 try { const last = localStorage.getItem("last"); if (last) $("url").value = last; } catch (e) {}
 </script>
 </body>
