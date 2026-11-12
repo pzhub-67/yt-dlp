@@ -156,7 +156,18 @@ def to_ytdlp_args(req):
     """Translate a request into real yt-dlp command-line arguments."""
     a = []
     mode = req["mode"]
-    if mode == "audio":
+    if not req.get("ffmpeg", True) and mode in ("audio", "video"):
+        # No ffmpeg (e.g. a-Shell on iPhone): nothing can be merged or converted,
+        # so take the best file the site already offers in one piece.
+        if req["clip"]:
+            raise UsageError("--clip needs ffmpeg, which isn't available on this device.")
+        if mode == "audio":
+            a += ["-f", "ba[ext=m4a]/ba/b"]
+        else:
+            a += ["-f", "b", "-S", (f"res:{req['quality']}" if req["quality"] else "res") + ",ext:mp4:m4a"]
+            if req["subs"] == "embed":
+                a += ["--write-subs", "--write-auto-subs", "--sub-langs", req["sub_lang"]]
+    elif mode == "audio":
         a += ["-f", "ba/b", "-x", "--audio-format", req["audio_format"], "--audio-quality", "0",
               "--embed-metadata"]
     elif mode == "subs":
@@ -327,10 +338,10 @@ def explain(err):
 # ---------------------------------------------------------------- actions
 
 def need_ffmpeg(req):
-    if shutil.which("ffmpeg") or req["mode"] in ("info",):
+    if req["ffmpeg"] or req["mode"] not in ("audio", "video"):
         return
-    print(dim("note: ffmpeg not found - quality and format conversion will be limited. "
-              "Install: https://ffmpeg.org/download.html"), file=sys.stderr)
+    print(dim("note: no ffmpeg on this device, so I'm taking the best ready-made file "
+              "(video is often capped at 360-720p; audio stays in its original format)."), file=sys.stderr)
 
 
 def make_ydl(args, progress=None, **extra):
@@ -348,7 +359,7 @@ def do_download(req):
     need_ffmpeg(req)
     args = to_ytdlp_args(req)
     stage = dest = None
-    if req["mode"] == "audio" or (req["mode"] == "video" and req["container"] != "mp4"):
+    if req["ffmpeg"] and (req["mode"] == "audio" or (req["mode"] == "video" and req["container"] != "mp4")):
         # Converting deletes its source file. Work in a side folder so a file you already
         # have with the same name (e.g. the video, when you now ask for the mp3) is never touched.
         dest = os.path.abspath(os.path.expanduser(req["to"] or "."))
@@ -466,6 +477,7 @@ def dispatch(req):
         return do_search(req)
     if not req["urls"]:
         raise UsageError("Give me a link or something to search for. Example:  grab https://youtu.be/dQw4w9WgXcQ")
+    req.setdefault("ffmpeg", bool(shutil.which("ffmpeg")))
     if req["show"]:
         print("yt-dlp " + " ".join(shlex.quote(x) for x in to_ytdlp_args(req)))
         return 0

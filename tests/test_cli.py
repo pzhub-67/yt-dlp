@@ -64,3 +64,12 @@ def test_generated_args_are_valid_ytdlp():
     for words in ([U], [U, "mp3"], [U, "subs"], [U, "--subs", "1080p", "mkv", "--clip", "0:10-0:20"],
                   [U, "webm", "--first", "2", "--browser", "firefox"]):
         yt_dlp.parse_options(args(*words))
+
+
+def test_without_ffmpeg_takes_ready_made_files():
+    v = to_ytdlp_args(dict(parse([U, "720p"]), ffmpeg=False))
+    assert v[:4] == ["-f", "b", "-S", "res:720,ext:mp4:m4a"] and "--remux-video" not in v
+    a = to_ytdlp_args(dict(parse([U, "mp3"]), ffmpeg=False))
+    assert "-x" not in a and a[1].startswith("ba[ext=m4a]")
+    with pytest.raises(UsageError):
+        to_ytdlp_args(dict(parse([U, "--clip", "1-2"]), ffmpeg=False))
