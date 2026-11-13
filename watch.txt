@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YouTube Watcher</title>
+<style>
+  :root { color-scheme: dark; --bg: #10151a; --panel: #1a232b; --line: #2e3c47; --ink: #e8eef2; --muted: #93a4b0; --accent: #4fc3c9; --bad: #ff8a80 }
+  * { box-sizing: border-box }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 24px 16px 40px }
+  main { max-width: 900px; margin: 0 auto; display: grid; gap: 16px }
+  h1 { font-size: 22px; margin: 0 }
+  form { display: flex; gap: 8px; flex-wrap: wrap }
+  input { flex: 1 1 240px; min-width: 0; font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 11px 18px; background: var(--accent); color: #06282b; cursor: pointer }
+  button.quiet { background: var(--panel); color: var(--ink); border: 1px solid var(--line) }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+  #msg { margin: 0; color: var(--muted); font-size: 14px; min-height: 1.5em }
+  a { color: var(--accent) }
+  #msg.bad { color: var(--bad) }
+  .frame { aspect-ratio: 16 / 9; width: 100%; background: #000; border-radius: 12px; overflow: hidden; display: grid; place-items: center; color: var(--muted) }
+  .frame iframe { width: 100%; height: 100%; border: 0 }
+  #results { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) }
+  #results button { display: grid; gap: 6px; padding: 0 0 10px; text-align: left; background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-weight: 400; min-width: 0 }
+  #results img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: #000 }
+  #results b, #results small { padding: 0 10px; overflow-wrap: anywhere }
+  #results b { font-weight: 600; font-size: 14px; line-height: 1.35 }
+  #results small { color: var(--muted); font-size: 13px }
+  details { border-top: 1px solid var(--line); padding-top: 12px; color: var(--muted); font-size: 14px }
+  summary { cursor: pointer; color: var(--ink); font-weight: 600 }
+  details ol { padding-left: 20px; display: grid; gap: 4px }
+  details form { margin-top: 8px }
+</style>
+</head>
+<body>
+<main>
+  <h1>YouTube Watcher</h1>
+  <form id="f">
+    <input id="url" type="text" placeholder="Paste a YouTube link, or type to search" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="YouTube link or search words">
+    <button type="submit">Go</button>
+    <button type="button" class="quiet" id="paste">Paste</button>
+  </form>
+  <p id="msg">Paste a link to watch it, or type words to search YouTube.</p>
+  <div class="frame" id="frame">Your video shows up here.</div>
+  <a id="open" hidden target="_blank" rel="noopener">Not playing? Open it on YouTube</a>
+  <div id="results" aria-live="polite"></div>
+  <details id="setup">
+    <summary>Search setup</summary>
+    <p>Search needs a free YouTube API key from Google. It is saved in this browser only and allows about 100 searches a day.</p>
+    <ol>
+      <li>Open <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">YouTube Data API v3 in Google Cloud</a>, create a project if asked, and tap Enable.</li>
+      <li>Go to Credentials, then Create credentials, then API key.</li>
+      <li>Copy the key, paste it below and tap Save.</li>
+    </ol>
+    <form id="kf">
+      <input id="key" type="text" placeholder="API key" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="YouTube API key">
+      <button type="submit">Save</button>
+      <button type="button" class="quiet" id="forget">Remove</button>
+    </form>
+    <p id="keymsg"></p>
+  </details>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Turn any YouTube link (or a bare video ID) into an embed address.
+function toEmbed(text) {
+  text = text.trim();
+  if (/^[\w-]{11}$/.test(text)) return "https://www.youtube.com/embed/" + text + "?playsinline=1";
+  let u;
+  try { u = new URL(/^https?:\/\//i.test(text) ? text : "https://" + text); } catch (e) { return null; }
+  const host = u.hostname.replace(/^(www|m|music)\./, "");
+  let id = null;
+  if (host === "youtu.be") id = u.pathname.slice(1).split("/")[0];
+  else if (host === "youtube.com" || host === "youtube-nocookie.com") {
+    const m = u.pathname.match(/^\/(?:embed|shorts|live|v)\/([\w-]{11})/);
+    id = m ? m[1] : u.searchParams.get("v");
+  } else return null;
+
+  const q = new URLSearchParams({ playsinline: "1" });
+  const list = u.searchParams.get("list");
+  if (list) q.set("list", list);
+  const t = u.searchParams.get("t") || u.searchParams.get("start");
+  if (t) {                                   // 90, 90s, 1m30s, 1h2m3s
+    const p = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/.exec(t);
+    if (p) q.set("start", (+p[1] || 0) * 3600 + (+p[2] || 0) * 60 + (+p[3] || 0));
+  }
+  if (id && /^[\w-]{11}$/.test(id)) return "https://www.youtube.com/embed/" + id + "?" + q;
+  if (list) return "https://www.youtube.com/embed/videoseries?" + q;
+  return null;
+}
+
+// YouTube's player only works on a page that has a real web address (http:// or https://).
+// Opened as a file, or inside an app's preview, it stays black or shows an error.
+const hosted = /^https?:$/.test(location.protocol);
+const NOT_HOSTED = "This page is open as a file, so YouTube's player will stay black. " +
+  "Open it from a web address instead: GitHub Pages, or http://localhost:8000/watch.html.";
+
+function say(text, bad) { $("msg").textContent = text; $("msg").classList.toggle("bad", !!bad); }
+
+function watch(text, fromSearch) {
+  const src = toEmbed(text);
+  if (!src) return say("That doesn't look like a YouTube link. Copy it from the Share button and try again.", true);
+  const f = document.createElement("iframe");
+  f.src = src;
+  f.title = "YouTube video";
+  f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+  f.allowFullscreen = true;
+  f.referrerPolicy = "strict-origin-when-cross-origin";
+  $("frame").replaceChildren(f);
+  const id = (src.match(/embed\/([\w-]{11})/) || [])[1];
+  $("open").href = id ? "https://www.youtube.com/watch?v=" + id : text;
+  $("open").hidden = false;
+  say(hosted ? "Tap the video to play." : NOT_HOSTED, !hosted);
+  if (!fromSearch) try { localStorage.setItem("last", text); } catch (e) {}
+}
+
+// ---- search (YouTube Data API, with the viewer's own key) ----
+const store = { get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
+                set(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} } };
+const decode = t => new DOMParser().parseFromString(t, "text/html").documentElement.textContent;
+const ytSearchUrl = q => "https://www.youtube.com/results?search_query=" + encodeURIComponent(q);
+
+function linkOut(q, lead) {
+  const a = document.createElement("a");
+  a.href = ytSearchUrl(q); a.target = "_blank"; a.rel = "noopener"; a.textContent = "Search on YouTube instead";
+  $("msg").replaceChildren(lead + " ", a);
+}
+
+async function search(q) {
+  const key = store.get("ytkey");
+  $("results").replaceChildren();
+  if (!key) {
+    $("setup").open = true;
+    $("msg").classList.add("bad");
+    return linkOut(q, "Search isn't set up yet. Follow Search setup below, or");
+  }
+  say("Searching…");
+  const api = "https://www.googleapis.com/youtube/v3/search?" + new URLSearchParams(
+    { part: "snippet", type: "video", videoEmbeddable: "true", maxResults: "12", q, key });
+  let data;
+  try { data = await (await fetch(api)).json(); }
+  catch (e) { $("msg").classList.add("bad"); return linkOut(q, "Couldn't reach YouTube search. Check your connection, or"); }
+  if (data.error) {
+    const why = (data.error.errors && data.error.errors[0] && data.error.errors[0].reason) || "";
+    const text = /quota/i.test(why) ? "Today's free searches are used up (they reset overnight)."
+      : /keyInvalid|badRequest|forbidden|accessNotConfigured|API_KEY/i.test(why + data.error.message)
+        ? "Google rejected the API key. Check Search setup below (is YouTube Data API v3 enabled?)."
+        : "Search failed: " + data.error.message;
+    $("msg").classList.add("bad");
+    return linkOut(q, text);
+  }
+  const items = (data.items || []).filter(i => i.id && i.id.videoId);
+  if (!items.length) return say("No videos found for “" + q + "”.");
+  say(items.length + " results. Tap one to watch.");
+  $("results").replaceChildren(...items.map(i => {
+    const b = document.createElement("button"); b.type = "button";
+    const img = document.createElement("img"); img.loading = "lazy"; img.alt = "";
+    img.src = ((i.snippet.thumbnails || {}).medium || {}).url || "https://i.ytimg.com/vi/" + i.id.videoId + "/mqdefault.jpg";
+    const t = document.createElement("b"); t.textContent = decode(i.snippet.title);
+    const c = document.createElement("small"); c.textContent = decode(i.snippet.channelTitle || "");
+    b.append(img, t, c);
+    b.addEventListener("click", () => { watch(i.id.videoId, true); $("frame").scrollIntoView({ behavior: "smooth", block: "start" }); });
+    return b;
+  }));
+}
+
+function go(text) {
+  text = text.trim();
+  if (!text) return;
+  if (toEmbed(text)) watch(text); else search(text);
+}
+
+$("kf").addEventListener("submit", e => {
+  e.preventDefault();
+  const k = $("key").value.trim();
+  if (!k) return;
+  store.set("ytkey", k); $("key").value = "";
+  $("keymsg").textContent = store.get("ytkey") ? "Key saved in this browser. Type something above and tap Go."
+    : "This browser won't let the page save the key, so you'd need to enter it each visit.";
+});
+$("forget").addEventListener("click", () => { store.set("ytkey", ""); $("keymsg").textContent = "Key removed."; });
+if (store.get("ytkey")) $("keymsg").textContent = "A key is saved in this browser.";
+
+$("f").addEventListener("submit", e => { e.preventDefault(); go($("url").value); });
+$("url").addEventListener("paste", () => setTimeout(() => { if (toEmbed($("url").value)) watch($("url").value); }, 0));
+$("paste").addEventListener("click", async () => {
+  try { $("url").value = await navigator.clipboard.readText(); go($("url").value); }
+  catch (e) { say("Couldn't read the clipboard. Long-press the box and choose Paste.", true); }
+});
+if (!hosted) say(NOT_HOSTED, true);
+try { const last = localStorage.getItem("last"); if (last) $("url").value = last; } catch (e) {}
+</script>
+</body>
+</html>
